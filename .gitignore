@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtualenv
+venv/
+.venv/
+
+# Runtime logs and state
+cron_visit.log
+cron_report.log
+visit_stats.json
+visit_stats.json.bak.*
+run_history.jsonl
+proxy_check_history.jsonl
+
+# Secrets / local overrides
+secrets.json
+.env
+.env.*
+*.local.json
+
+# Backups
+*.bak
+*.bak.*
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Installer temp / diagnostics
+*.log
+*.tmp
+*.swp
+*.swo
+*.orig

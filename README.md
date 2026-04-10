@@ -25,22 +25,25 @@
 
 ## Quick Start
 
-### 1. 一键安装
+### 1. 一键安装（推荐）
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lbjxr/blog_access/main/install.sh | sudo bash
 ```
 
-### 2. 本地源码安装
+### 2. 一键预检查（不真正安装）
 
 ```bash
-sudo bash setup_blog_access.sh
+curl -fsSL https://raw.githubusercontent.com/lbjxr/blog_access/main/install.sh | sudo env BLOG_ACCESS_CHECK_ONLY=1 bash
 ```
 
-### 3. 仅做环境预检查
+### 3. 安装后运行
 
 ```bash
-sudo BLOG_ACCESS_CHECK_ONLY=1 bash setup_blog_access.sh
+cd /opt/blog_access
+./run.sh visit
+./run.sh report
+./run.sh proxy-check 3
 ```
 
 ---
@@ -254,7 +257,7 @@ BLOG_ACCESS_SKIP_CLEAR=1 ./run.sh report test
 
 ---
 
-## Publish Notes
+## Notes
 
 如果你准备二次开发或重新发布：
 - 使用 `config.example.json` 和 `secrets.example.json` 作为公开模板

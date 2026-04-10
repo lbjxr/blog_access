@@ -1,25 +1,95 @@
 # blog_access
 
-一个基于 Playwright 的博客访问模拟脚本，支持：
-- 多站点自动访问
-- 按页翻页、随机点文章、随机滚动和停留
-- 访问统计落盘
-- Telegram 日报发送
-- HTTP 认证代理（浏览器实例级，不影响 VPS 全局网络）
-- 代理出口检测
+一个基于 **Playwright** 的博客访问模拟工具，支持多站点访问、HTTP 认证代理、访问统计、Telegram 日报，以及代理出口检测。
 
-## 适合 GitHub 首发的仓库结构
+适合用在：
+- 自建博客的基础访问模拟
+- 多站点定时访问任务
+- 需要通过浏览器而不是裸 HTTP 请求进行访问的场景
+- 需要结合 HTTP 代理池做访问分流的场景
 
-- `install.sh`：未来给 `curl | bash` 一键安装用的入口
-- `setup_blog_access.sh`：根目录安装入口
-- `scripts/setup_blog_access.sh`：安装器主体
-- `scripts/github_publish_check.sh`：发布前自检敏感信息
-- `config.example.json`：公开配置模板
-- `secrets.example.json`：公开密钥模板
-- `.gitignore`：忽略本地密钥、日志、统计和运行环境
-- `GITHUB_RELEASE_CHECKLIST.md`：首发前检查清单
+---
 
-## 本地运行入口
+## Features
+
+- **Playwright 浏览器访问**：不是简单 requests，支持更接近真实浏览行为的访问流程
+- **多站点访问**：一个配置可管理多个站点
+- **HTTP 认证代理支持**：支持 `http://user:pass@host:port` 形式代理
+- **代理健康检查 + 回退直连**：代理异常时可自动回退，避免任务完全失败
+- **访问统计**：累计访问数、代理访问数、直连访问数、失败数等
+- **Telegram 报告**：支持日报发送、dry-run、skip-clear
+- **代理出口检测**：可直接检测代理池出口 IP 是否在轮换
+- **安装脚本**：支持本地安装、GitHub 拉取安装、curl 一键安装
+
+---
+
+## Quick Start
+
+### 1. 一键安装
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lbjxr/blog_access/main/install.sh | sudo bash
+```
+
+### 2. 本地源码安装
+
+```bash
+sudo bash setup_blog_access.sh
+```
+
+### 3. 仅做环境预检查
+
+```bash
+sudo BLOG_ACCESS_CHECK_ONLY=1 bash setup_blog_access.sh
+```
+
+---
+
+## Project Structure
+
+```text
+install.sh                     # curl | bash 一键安装入口
+setup_blog_access.sh           # 根目录安装入口
+scripts/setup_blog_access.sh   # 安装器主体
+scripts/github_publish_check.sh# 发布前敏感信息检查
+blog_visit_per_site_v2.py      # 主访问脚本
+proxy_utils.py                 # 代理解析与健康检查
+ip_proxy_check.py              # 代理出口检测
+run.sh                         # 运行入口（带互斥锁）
+config.example.json            # 配置模板
+secrets.example.json           # 密钥模板
+```
+
+---
+
+## Installation Modes
+
+### Local Source Install
+
+```bash
+sudo bash setup_blog_access.sh
+```
+
+### GitHub Source Install
+
+```bash
+sudo BLOG_ACCESS_SOURCE_MODE=github \
+  BLOG_ACCESS_REPO=https://github.com/lbjxr/blog_access.git \
+  BLOG_ACCESS_REF=main \
+  bash setup_blog_access.sh
+```
+
+### Check Only
+
+```bash
+sudo BLOG_ACCESS_CHECK_ONLY=1 bash setup_blog_access.sh
+```
+
+---
+
+## Usage
+
+进入安装目录后执行：
 
 ```bash
 cd /opt/blog_access
@@ -28,111 +98,171 @@ cd /opt/blog_access
 ./run.sh proxy-check
 ```
 
-## 配置与密钥
+### Commands
 
-### 主配置：`config.json`
-放非敏感配置，例如代理、站点、分页数、选择器等。
-
-### 密钥配置：`secrets.json`
-放 Telegram 凭据。
-
-解析优先级：
-1. 站点内 `tg_token` / `tg_chat`（兼容旧配置）
-2. 环境变量 `BLOG_ACCESS_TG_TOKEN` / `BLOG_ACCESS_TG_CHAT`
-3. `secrets.json`
-
-## 安装方式
-
-### 方式 1：本地源码安装
+#### visit
+执行博客访问任务。
 
 ```bash
-sudo bash setup_blog_access.sh
+./run.sh visit
+./run.sh visit server-name
 ```
 
-### 方式 2：仅做环境预检查
+#### report
+发送统计报告。
 
 ```bash
-sudo BLOG_ACCESS_CHECK_ONLY=1 bash setup_blog_access.sh
+./run.sh report
+./run.sh report server-name
 ```
 
-### 方式 3：显式指定 GitHub 仓库安装
-
-```bash
-sudo BLOG_ACCESS_SOURCE_MODE=github \
-  BLOG_ACCESS_REPO=https://github.com/owner/repo.git \
-  BLOG_ACCESS_REF=main \
-  bash setup_blog_access.sh
-```
-
-### 方式 4：发布后 curl 一键安装
-
-发布到 GitHub 后，把 `install.sh` 里的默认仓库地址改成真实仓库，然后支持：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/owner/repo/main/install.sh | sudo bash
-```
-
-## 发布到 GitHub 前必做
-
-### 1. 不要提交这些文件
-- `secrets.json`
-- `.env`
-- `visit_stats.json`
-- `visit_stats.json.bak.*`
-- `cron_visit.log`
-- `cron_report.log`
-- `run_history.jsonl`
-- `proxy_check_history.jsonl`
-- `venv/`
-- `__pycache__/`
-
-### 2. 运行发布前检查
-
-```bash
-bash scripts/github_publish_check.sh
-```
-
-### 3. 查看首发清单
-
-```bash
-cat GITHUB_RELEASE_CHECKLIST.md
-```
-
-### 4. 优先提交模板文件
-- `config.example.json`
-- `secrets.example.json`
-
-新机器初始化后，再复制为真实配置：
-
-```bash
-cp config.example.json config.json
-cp secrets.example.json secrets.json
-```
-
-## 代理出口检测
+#### proxy-check
+检测代理出口 IP。
 
 ```bash
 ./run.sh proxy-check
 ./run.sh proxy-check 3
 ```
 
-当前使用 `https://api.ipify.org/?format=text` 作为稳定的纯文本出口查询接口。
+---
 
-## 调试开关
+## Configuration
+
+### `config.json`
+主配置文件，保存站点、代理、分页等信息。
+
+示例：
+
+```json
+{
+  "proxy": {
+    "enabled": true,
+    "url": "http://Default:YOUR_PROXY_PASSWORD@YOUR_PROXY_HOST:YOUR_PROXY_PORT",
+    "bypass": "localhost,127.0.0.1",
+    "fallback_direct": true,
+    "healthcheck": {
+      "enabled": true,
+      "url": "https://www.gstatic.com/generate_204",
+      "timeout": 10,
+      "expected_statuses": [200, 204, 301, 302]
+    }
+  },
+  "sites": [
+    {
+      "url": "https://example.com"
+    }
+  ],
+  "pages": 3,
+  "headless": true
+}
+```
+
+### `secrets.json`
+保存 Telegram 相关敏感信息。
+
+```json
+{
+  "telegram": {
+    "default_token": "YOUR_BOT_TOKEN",
+    "default_chat": "YOUR_CHAT_ID"
+  }
+}
+```
+
+Telegram 配置解析优先级：
+1. 站点内 `tg_token` / `tg_chat`
+2. 环境变量 `BLOG_ACCESS_TG_TOKEN` / `BLOG_ACCESS_TG_CHAT`
+3. `secrets.json`
+
+---
+
+## Site Selectors
+
+支持站点级选择器覆盖：
+
+```json
+{
+  "url": "https://example.com",
+  "selectors": {
+    "cards": ["div.recent-post-item", "div.post-block"],
+    "title_links": ["a.article-title"],
+    "fallback_links": ["div.post-button a.btn", "h2.post-title a"]
+  }
+}
+```
+
+未配置时使用默认选择器。
+
+---
+
+## Statistics
+
+`visit_stats.json` 主要字段：
+
+- `total_visits`
+- `successful_visits`
+- `failed_visits`
+- `proxy_visits`
+- `direct_visits`
+- `proxy_healthcheck_failures`
+- `proxy_launch_failovers`
+- `run_count`
+- `last_run_articles`
+- `last_run_proxy_articles`
+- `last_run_direct_articles`
+
+---
+
+## Runtime Files
+
+运行过程中会生成：
+
+- `cron_visit.log`
+- `cron_report.log`
+- `visit_stats.json`
+- `run_history.jsonl`
+- `proxy_check_history.jsonl`
+
+这些文件都属于运行态数据，不建议提交到 GitHub。
+
+---
+
+## Report Debug Options
 
 ### Dry Run
+只预览报告，不真实发送：
+
 ```bash
 BLOG_ACCESS_DRY_RUN=1 ./run.sh report test
 ```
 
 ### Skip Clear
+真实发送报告，但发送后保留统计文件：
+
 ```bash
 BLOG_ACCESS_SKIP_CLEAR=1 ./run.sh report test
 ```
 
-## 当前生产调度（rn 服务器）
+---
+
+## Default Cron Example
 
 ```cron
 */40 * * * * cd /opt/blog_access && ./run.sh visit >> ./cron_visit.log 2>&1
 30 9 * * * cd /opt/blog_access && ./run.sh report >> ./cron_report.log 2>&1
 ```
+
+---
+
+## Publish Notes
+
+如果你准备二次开发或重新发布：
+- 使用 `config.example.json` 和 `secrets.example.json` 作为公开模板
+- 使用 `.gitignore` 避免提交日志、状态文件和 secrets
+- 使用 `scripts/github_publish_check.sh` 在 push 前做一次检查
+
+---
+
+## License
+
+本仓库当前包含 `LICENSE` 文件，具体以仓库内文件内容为准。

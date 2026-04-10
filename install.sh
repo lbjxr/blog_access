@@ -1,11 +1,10 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-# 用于未来 GitHub 一键安装的入口脚本。
-# 发布到 GitHub 前，请把 DEFAULT_REPO 改成真实仓库地址，
-# 这样新机器上只需一条 curl 命令即可完成安装。
+# GitHub 一键安装入口脚本。
+# 默认仓库已指向正式地址，也支持用 BLOG_ACCESS_REPO / BLOG_ACCESS_REF 覆盖。
 
-DEFAULT_REPO="${BLOG_ACCESS_REPO:-https://github.com/OWNER/REPO.git}"
+DEFAULT_REPO="${BLOG_ACCESS_REPO:-https://github.com/lbjxr/blog_access.git}"
 DEFAULT_REF="${BLOG_ACCESS_REF:-main}"
 TMP_DIR="$(mktemp -d /tmp/blog_access_install.XXXXXX)"
 
@@ -15,12 +14,6 @@ cleanup() {
 trap cleanup EXIT
 trap 'echo "[ERR] 安装入口执行失败，请检查上方日志。" >&2' ERR
 
-if [[ "$DEFAULT_REPO" == *"OWNER/REPO"* ]]; then
-  echo "[ERR] 当前 install.sh 仍是占位仓库地址。" >&2
-  echo "请在发布前把 DEFAULT_REPO 改成真实仓库，或临时这样运行：" >&2
-  echo "BLOG_ACCESS_REPO=https://github.com/owner/repo.git curl -fsSL <raw-install-url> | sudo bash" >&2
-  exit 1
-fi
 
 if command -v git >/dev/null 2>&1; then
   git clone --depth 1 --branch "$DEFAULT_REF" "$DEFAULT_REPO" "$TMP_DIR/repo"

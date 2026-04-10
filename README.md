@@ -31,6 +31,8 @@
 curl -fsSL https://raw.githubusercontent.com/lbjxr/blog_access/main/install.sh | sudo bash
 ```
 
+如果卡在 Playwright Chromium 下载阶段，通常是网络/CDN 波动，直接重试一次即可。
+
 ### 2. 一键预检查（不真正安装）
 
 ```bash

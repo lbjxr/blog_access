@@ -82,6 +82,26 @@ apt_install() {
   apt-get install -y --no-install-recommends "${pkgs[@]}"
 }
 
+retry_cmd() {
+  local max_attempts="$1"
+  shift
+  local attempt=1
+  local rc=0
+  while (( attempt <= max_attempts )); do
+    if "$@"; then
+      return 0
+    fi
+    rc=$?
+    warn "第 ${attempt}/${max_attempts} 次执行失败：$*"
+    if (( attempt == max_attempts )); then
+      return "$rc"
+    fi
+    sleep $(( attempt * 3 ))
+    attempt=$(( attempt + 1 ))
+  done
+  return "$rc"
+}
+
 check_base_env() {
   step "基础环境检查"
   if ! command_exists apt-get; then
@@ -308,7 +328,7 @@ setup_python_env() {
 
   step "安装 Playwright 浏览器及依赖"
   if command_exists playwright; then
-    if ! playwright install-deps; then
+    if ! retry_cmd 2 playwright install-deps; then
       warn "playwright install-deps 失败，尝试手动安装常见依赖。"
       apt_install libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 libdrm2 libgbm1 \
         libgtk-3-0 libnspr4 libnss3 libxcomposite1 libxdamage1 libxfixes3 libxkbcommon0 \
@@ -318,9 +338,13 @@ setup_python_env() {
     warn "未找到 playwright 命令，直接尝试 Python 模块安装浏览器。"
   fi
 
-  if ! python -m playwright install chromium; then
-    warn "首次安装 Chromium 失败，重试一次。"
-    python -m playwright install chromium
+  export PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT="120000"
+  export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-0}"
+
+  if ! retry_cmd 3 python -m playwright install chromium; then
+    err "Chromium 下载/安装失败。可能是网络波动、CDN 中断或 Node 子进程 EPIPE。"
+    err "你可以稍后重试初始化，或在目标机器上手动执行：source $VENV_DIR/bin/activate && python -m playwright install chromium"
+    exit 1
   fi
 
   deactivate

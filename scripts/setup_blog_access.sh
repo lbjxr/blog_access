@@ -16,7 +16,7 @@ CRON_VISIT='*/40 * * * * cd /opt/blog_access && ./run.sh visit >> ./cron_visit.l
 CRON_REPORT='30 9 * * * cd /opt/blog_access && ./run.sh report >> ./cron_report.log 2>&1'
 REQUIRED_FILES=("blog_visit_per_site_v2.py" "config.json" "requirements.txt" "run.sh" "proxy_utils.py" "ip_proxy_check.py")
 OPTIONAL_FILES=("README.md" "install.sh" "setup_blog_access.sh" ".gitignore" "config.example.json" "secrets.example.json")
-GITHUB_REPO_DEFAULT="${BLOG_ACCESS_REPO:-}"
+GITHUB_REPO_DEFAULT="${BLOG_ACCESS_REPO:-https://github.com/lbjxr/blog_access.git}"
 GITHUB_REF_DEFAULT="${BLOG_ACCESS_REF:-main}"
 GITHUB_MODE="${BLOG_ACCESS_SOURCE_MODE:-auto}"
 CHECK_ONLY="${BLOG_ACCESS_CHECK_ONLY:-0}"
@@ -195,8 +195,8 @@ prepare_source() {
         warn "切换到 GitHub 获取模式。"
         fetch_source_from_github "$GITHUB_REPO_DEFAULT" "$GITHUB_REF_DEFAULT"
       else
-        err "当前目录、脚本目录及 $INSTALL_DIR 都未发现完整安装源；且未设置 BLOG_ACCESS_REPO，无法自动从 GitHub 下载。"
-        err "后续若要支持 GitHub 一键执行，请在执行前设置：BLOG_ACCESS_REPO=https://github.com/owner/repo.git"
+        err "当前目录、脚本目录及 $INSTALL_DIR 都未发现完整安装源，且自动从默认仓库拉取也不可用。"
+        err "如需覆盖默认仓库，可手动设置：BLOG_ACCESS_REPO=https://github.com/owner/repo.git"
         exit 1
       fi
     fi

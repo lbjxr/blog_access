@@ -75,9 +75,19 @@ sudo bash setup_blog_access.sh
 
 ### GitHub Source Install
 
+默认仓库已指向：`https://github.com/lbjxr/blog_access.git`
+
 ```bash
 sudo BLOG_ACCESS_SOURCE_MODE=github \
-  BLOG_ACCESS_REPO=https://github.com/lbjxr/blog_access.git \
+  BLOG_ACCESS_REF=main \
+  bash setup_blog_access.sh
+```
+
+如果你要临时改为别的仓库，再额外传：
+
+```bash
+sudo BLOG_ACCESS_SOURCE_MODE=github \
+  BLOG_ACCESS_REPO=https://github.com/owner/repo.git \
   BLOG_ACCESS_REF=main \
   bash setup_blog_access.sh
 ```

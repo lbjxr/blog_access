@@ -31,7 +31,7 @@
 curl -fsSL https://raw.githubusercontent.com/lbjxr/blog_access/main/install.sh | sudo bash
 ```
 
-如果卡在 Playwright Chromium 下载阶段，通常是网络/CDN 波动，直接重试一次即可。
+如果卡在 Playwright Chromium 下载阶段，通常是网络/CDN 波动。安装器会自动重试；如果仍失败，建议稍后重新执行整条安装命令。
 
 如果在 `apt-get install` 阶段出现 `Killed`，通常是小内存机器触发 OOM。当前安装器已支持失败后自动切换为逐包安装；若机器内存特别小，建议先临时加一点 swap 再重试。
 

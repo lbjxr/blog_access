@@ -101,9 +101,10 @@ retry_cmd() {
   while (( attempt <= max_attempts )); do
     if "$@"; then
       return 0
+    else
+      rc=$?
     fi
-    rc=$?
-    warn "第 ${attempt}/${max_attempts} 次执行失败：$*"
+    warn "第 ${attempt}/${max_attempts} 次执行失败（退出码 $rc）：$*"
     if (( attempt == max_attempts )); then
       return "$rc"
     fi
@@ -337,9 +338,10 @@ setup_python_env() {
   export PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT="120000"
   export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-0}"
 
-  if ! retry_cmd 3 python -m playwright install chromium; then
+  if ! retry_cmd 3 env CI=1 python -m playwright install chromium; then
     err "Chromium 下载/安装失败。可能是网络波动、CDN 中断或 Node 子进程 EPIPE。"
-    err "你可以稍后重试初始化，或在目标机器上手动执行：source $VENV_DIR/bin/activate && python -m playwright install chromium"
+    err "安装脚本将停止，不再继续后续步骤。"
+    err "你可以稍后重试初始化，或在目标机器上手动执行：source $VENV_DIR/bin/activate && CI=1 python -m playwright install chromium"
     exit 1
   fi
 

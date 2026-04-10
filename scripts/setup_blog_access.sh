@@ -17,9 +17,8 @@ CRON_REPORT='30 9 * * * cd /opt/blog_access && ./run.sh report >> ./cron_report.
 REQUIRED_FILES=("blog_visit_per_site_v2.py" "requirements.txt" "run.sh" "proxy_utils.py" "ip_proxy_check.py")
 TEMPLATE_REQUIRED_FILES=("config.example.json")
 OPTIONAL_FILES=("README.md" "install.sh" "setup_blog_access.sh" ".gitignore" "secrets.example.json")
-GITHUB_REPO_DEFAULT="${BLOG_ACCESS_REPO:-https://github.com/lbjxr/blog_access.git}"
-GITHUB_REF_DEFAULT="${BLOG_ACCESS_REF:-main}"
-GITHUB_MODE="${BLOG_ACCESS_SOURCE_MODE:-auto}"
+GITHUB_REPO_DEFAULT="https://github.com/lbjxr/blog_access.git"
+GITHUB_REF_DEFAULT="main"
 CHECK_ONLY="${BLOG_ACCESS_CHECK_ONLY:-0}"
 TMP_SOURCE_DIR=""
 
@@ -153,11 +152,6 @@ fetch_source_from_github() {
   local repo_url="$1"
   local ref="$2"
 
-  if [[ -z "$repo_url" ]]; then
-    err "未提供 GitHub 仓库地址。请设置 BLOG_ACCESS_REPO，例如：BLOG_ACCESS_REPO=https://github.com/owner/repo.git"
-    exit 1
-  fi
-
   TMP_SOURCE_DIR="$(mktemp -d /tmp/blog_access_src.XXXXXX)"
   step "从 GitHub 获取安装源"
   log "仓库：$repo_url"
@@ -186,7 +180,7 @@ fetch_source_from_github() {
     fi
   fi
 
-  err "无法从 GitHub 获取源码。请检查 BLOG_ACCESS_REPO / BLOG_ACCESS_REF 是否正确，或将脚本与项目文件放在同一目录（或 /opt/blog_access）后重试。"
+  err "无法从 GitHub 获取源码，请稍后重试，或将脚本与项目文件放在同一目录（或 /opt/blog_access）后重试。"
   exit 1
 }
 
@@ -202,28 +196,18 @@ prepare_source() {
   )
   local candidate
 
-  if [[ "$GITHUB_MODE" == "github" ]]; then
-    fetch_source_from_github "$GITHUB_REPO_DEFAULT" "$GITHUB_REF_DEFAULT"
-  else
-    for candidate in "${candidates[@]}"; do
-      if has_local_source "$candidate"; then
-        WORK_DIR="$candidate"
-        log "检测到本地完整安装源：$WORK_DIR"
-        break
-      fi
-    done
-
-    if ! has_local_source "$WORK_DIR"; then
-      warn "本地未发现完整安装源。"
-      if [[ -n "$GITHUB_REPO_DEFAULT" ]]; then
-        warn "切换到 GitHub 获取模式。"
-        fetch_source_from_github "$GITHUB_REPO_DEFAULT" "$GITHUB_REF_DEFAULT"
-      else
-        err "当前目录、脚本目录及 $INSTALL_DIR 都未发现完整安装源，且自动从默认仓库拉取也不可用。"
-        err "如需覆盖默认仓库，可手动设置：BLOG_ACCESS_REPO=https://github.com/owner/repo.git"
-        exit 1
-      fi
+  for candidate in "${candidates[@]}"; do
+    if has_local_source "$candidate"; then
+      WORK_DIR="$candidate"
+      log "检测到本地完整安装源：$WORK_DIR"
+      break
     fi
+  done
+
+  if ! has_local_source "$WORK_DIR"; then
+    warn "本地未发现完整安装源。"
+    warn "切换到 GitHub 获取模式。"
+    fetch_source_from_github "$GITHUB_REPO_DEFAULT" "$GITHUB_REF_DEFAULT"
   fi
 
   local file
@@ -422,11 +406,9 @@ show_summary() {
   $CRON_VISIT
   $CRON_REPORT
 
-GitHub 扩展说明:
-  - 可通过环境变量 BLOG_ACCESS_REPO / BLOG_ACCESS_REF 指定仓库和分支
-  - 当当前目录缺少完整安装源时，如已设置 BLOG_ACCESS_REPO，脚本会自动尝试从 GitHub 拉取源码
+说明:
+  - 当前脚本默认优先使用本地源码；找不到时会自动拉取 https://github.com/lbjxr/blog_access.git 的 main 分支
   - 可先做预检查而不实际安装：BLOG_ACCESS_CHECK_ONLY=1 bash setup_blog_access.sh
-  - 也可强制使用 GitHub 源：BLOG_ACCESS_SOURCE_MODE=github BLOG_ACCESS_REPO=https://github.com/owner/repo.git bash setup_blog_access.sh
 EOF
 }
 
@@ -434,7 +416,7 @@ main() {
   echo -e "${BOLD}blog_access 一键初始化脚本${RESET}"
   echo -e "- 带基础环境检查"
   echo -e "- 带 Playwright / Python 安装冗余处理"
-  echo -e "- 兼容本地源码或 GitHub 拉取安装"
+  echo -e "- 优先使用本地源码，缺失时自动从 GitHub 拉取安装"
   echo -e "- 保留现有 secrets / 统计 / 日志，不做破坏性覆盖"
   if [[ "$CHECK_ONLY" == "1" ]]; then
     echo -e "- 当前模式：CHECK_ONLY（只检查，不执行安装/修改）"

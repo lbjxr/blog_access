@@ -19,7 +19,7 @@
 - **访问统计**：累计访问数、代理访问数、直连访问数、失败数等
 - **Telegram 报告**：支持日报发送、dry-run、skip-clear
 - **代理出口检测**：可直接检测代理池出口 IP 是否在轮换
-- **安装脚本**：支持本地安装、GitHub 拉取安装、curl 一键安装
+- **安装脚本**：支持本地安装、自动 GitHub 拉取安装、curl 一键安装
 
 ---
 
@@ -75,30 +75,15 @@ secrets.example.json           # 密钥模板
 sudo bash setup_blog_access.sh
 ```
 
-### GitHub Source Install
-
-默认仓库已指向：`https://github.com/lbjxr/blog_access.git`
-
-```bash
-sudo BLOG_ACCESS_SOURCE_MODE=github \
-  BLOG_ACCESS_REF=main \
-  bash setup_blog_access.sh
-```
-
-如果你要临时改为别的仓库，再额外传：
-
-```bash
-sudo BLOG_ACCESS_SOURCE_MODE=github \
-  BLOG_ACCESS_REPO=https://github.com/owner/repo.git \
-  BLOG_ACCESS_REF=main \
-  bash setup_blog_access.sh
-```
-
 ### Check Only
 
 ```bash
 sudo BLOG_ACCESS_CHECK_ONLY=1 bash setup_blog_access.sh
 ```
+
+说明：
+- 安装脚本会优先使用本地源码
+- 如果当前目录找不到完整项目文件，会自动从 GitHub 拉取当前仓库代码继续安装
 
 ---
 

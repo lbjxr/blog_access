@@ -2,10 +2,10 @@
 set -Eeuo pipefail
 
 # GitHub 一键安装入口脚本。
-# 默认仓库已指向正式地址，也支持用 BLOG_ACCESS_REPO / BLOG_ACCESS_REF 覆盖。
+# 默认直接安装当前仓库 main 分支。
 
-DEFAULT_REPO="${BLOG_ACCESS_REPO:-https://github.com/lbjxr/blog_access.git}"
-DEFAULT_REF="${BLOG_ACCESS_REF:-main}"
+DEFAULT_REPO="https://github.com/lbjxr/blog_access.git"
+DEFAULT_REF="main"
 TMP_DIR="$(mktemp -d /tmp/blog_access_install.XXXXXX)"
 
 cleanup() {

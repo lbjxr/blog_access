@@ -4,6 +4,8 @@ set -Eeuo pipefail
 export VISUAL="${VISUAL:-vim}"
 export EDITOR="${EDITOR:-vim}"
 export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+export APT_LISTCHANGES_FRONTEND=none
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -78,7 +80,17 @@ apt_install() {
   apt_update_once
   local pkgs=("$@")
   log "安装软件包：${pkgs[*]}"
-  apt-get install -y --no-install-recommends "${pkgs[@]}"
+
+  if apt-get install -y --no-install-recommends "${pkgs[@]}"; then
+    return 0
+  fi
+
+  warn "批量安装失败，切换为逐包安装模式（更省内存，更适合小机器）"
+  local pkg
+  for pkg in "${pkgs[@]}"; do
+    log "单包安装：$pkg"
+    retry_cmd 2 apt-get install -y --no-install-recommends "$pkg"
+  done
 }
 
 retry_cmd() {

@@ -142,7 +142,7 @@ cd /opt/blog_access
 ## Configuration
 
 ### `config.json`
-主配置文件，保存站点、代理、分页等信息。
+主配置文件，保存站点、代理、分页等信息。通过 GitHub/一键安装时，如果仓库中没有真实 `config.json`，安装器会自动根据 `config.example.json` 生成一份。
 
 示例：
 
@@ -171,7 +171,7 @@ cd /opt/blog_access
 ```
 
 ### `secrets.json`
-保存 Telegram 相关敏感信息。
+保存 Telegram 相关敏感信息。通过 GitHub/一键安装时，如果仓库中没有真实 `secrets.json`，安装器会自动根据 `secrets.example.json` 生成一份模板。
 
 ```json
 {

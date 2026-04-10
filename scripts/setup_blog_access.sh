@@ -14,8 +14,9 @@ RUN_SCRIPT="$INSTALL_DIR/run.sh"
 SECRETS_FILE="$INSTALL_DIR/secrets.json"
 CRON_VISIT='*/40 * * * * cd /opt/blog_access && ./run.sh visit >> ./cron_visit.log 2>&1'
 CRON_REPORT='30 9 * * * cd /opt/blog_access && ./run.sh report >> ./cron_report.log 2>&1'
-REQUIRED_FILES=("blog_visit_per_site_v2.py" "config.json" "requirements.txt" "run.sh" "proxy_utils.py" "ip_proxy_check.py")
-OPTIONAL_FILES=("README.md" "install.sh" "setup_blog_access.sh" ".gitignore" "config.example.json" "secrets.example.json")
+REQUIRED_FILES=("blog_visit_per_site_v2.py" "requirements.txt" "run.sh" "proxy_utils.py" "ip_proxy_check.py")
+TEMPLATE_REQUIRED_FILES=("config.example.json")
+OPTIONAL_FILES=("README.md" "install.sh" "setup_blog_access.sh" ".gitignore" "secrets.example.json")
 GITHUB_REPO_DEFAULT="${BLOG_ACCESS_REPO:-https://github.com/lbjxr/blog_access.git}"
 GITHUB_REF_DEFAULT="${BLOG_ACCESS_REF:-main}"
 GITHUB_MODE="${BLOG_ACCESS_SOURCE_MODE:-auto}"
@@ -122,6 +123,9 @@ has_local_source() {
   for file in "${REQUIRED_FILES[@]}"; do
     [[ -f "$base/$file" ]] || return 1
   done
+  for file in "${TEMPLATE_REQUIRED_FILES[@]}"; do
+    [[ -f "$base/$file" || -f "$base/${file%.example.json}.json" ]] || return 1
+  done
   return 0
 }
 
@@ -206,6 +210,9 @@ prepare_source() {
   for file in "${REQUIRED_FILES[@]}"; do
     [[ -f "$WORK_DIR/$file" ]] || { err "安装源仍缺少必要文件：$file"; exit 1; }
   done
+  for file in "${TEMPLATE_REQUIRED_FILES[@]}"; do
+    [[ -f "$WORK_DIR/$file" || -f "$WORK_DIR/${file%.example.json}.json" ]] || { err "安装源仍缺少配置模板：$file"; exit 1; }
+  done
 }
 
 backup_existing_install() {
@@ -242,6 +249,19 @@ sync_project_files() {
     mkdir -p "$INSTALL_DIR/scripts"
     [[ -f "$WORK_DIR/scripts/setup_blog_access.sh" ]] && install -m 0755 "$WORK_DIR/scripts/setup_blog_access.sh" "$INSTALL_DIR/scripts/setup_blog_access.sh"
     chmod +x "$INSTALL_DIR/run.sh" "$INSTALL_DIR/setup_blog_access.sh" "$INSTALL_DIR/install.sh"
+  fi
+
+  if [[ ! -f "$INSTALL_DIR/config.json" ]]; then
+    if [[ -f "$WORK_DIR/config.json" ]]; then
+      install -m 0644 "$WORK_DIR/config.json" "$INSTALL_DIR/config.json"
+      log "已初始化 config.json"
+    elif [[ -f "$WORK_DIR/config.example.json" ]]; then
+      install -m 0644 "$WORK_DIR/config.example.json" "$INSTALL_DIR/config.json"
+      log "已根据模板初始化 config.json"
+    else
+      err "未找到 config.json 或 config.example.json，无法初始化配置。"
+      exit 1
+    fi
   fi
 
   if [[ ! -f "$SECRETS_FILE" ]]; then

@@ -229,6 +229,12 @@ Telegram 配置解析优先级：
 
 ---
 
+## Telegram Report Notes
+
+- 报告消息采用紧凑样式（分组 + 图标行），便于移动端快速阅读。
+- 发送默认使用 Telegram `HTML` parse mode；若遇到实体解析错误，会自动降级为纯文本重试一次。
+- 当任一站点发送失败时，脚本会保留 `visit_stats.json`（不自动清空），避免统计数据丢失，便于修复后重发。
+
 ## Report Debug Options
 
 ### Dry Run

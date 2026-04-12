@@ -2,6 +2,7 @@ import asyncio
 import random
 import datetime
 import json
+import html
 import os
 import requests
 from urllib.parse import urljoin, urlparse
@@ -192,23 +193,56 @@ def send_telegram_message(token, chat_id, message):
     if os.environ.get("BLOG_ACCESS_DRY_RUN") == "1":
         log("🧪 DRY RUN：跳过 Telegram 实际发送")
         log(f"📝 DRY RUN 报告内容预览:\n{message}")
+
         return True
 
+    def post_telegram(data):
+        return requests.post(url, data=data, timeout=20)
+
+    def parse_payload(resp):
+        try:
+            return resp.json()
+        except Exception:
+            return {"ok": False, "description": resp.text[:300]}
+
     url = f"https://api.telegram.org/bot{token}/sendMessage"
+    chat_id_str = str(chat_id).strip()
+    html_data = {
+        "chat_id": chat_id_str,
+        "text": message,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }
+
     try:
-        response = requests.post(url, data={
-            "chat_id": chat_id,
-            "text": message,
-            "parse_mode": "Markdown"
-        }, timeout=20)
-        response.raise_for_status()
-        payload = response.json()
-        if not payload.get("ok"):
-            log(f"⚠️ Telegram API 返回失败: {payload}")
-            return False
-        return True
-    except Exception as e:
-        log(f"⚠️ 发送 Telegram 消息失败: {e}")
+        response = post_telegram(html_data)
+        payload = parse_payload(response)
+        if response.ok and payload.get("ok"):
+            return True
+
+        description = str(payload.get("description", ""))
+        log(
+            f"⚠️ Telegram 发送失败(status={response.status_code}) chat_id={chat_id_str}: {description or payload}"
+        )
+
+        if response.status_code == 400 and "can't parse entities" in description.lower():
+            log("ℹ️ 检测到 HTML 解析失败，降级为纯文本重试")
+            plain_data = {
+                "chat_id": chat_id_str,
+                "text": message,
+                "disable_web_page_preview": True,
+            }
+            response2 = post_telegram(plain_data)
+            payload2 = parse_payload(response2)
+            if response2.ok and payload2.get("ok"):
+                log("✅ 纯文本降级发送成功")
+                return True
+            log(
+                f"⚠️ 纯文本重试仍失败(status={response2.status_code}) chat_id={chat_id_str}: {payload2.get('description', payload2)}"
+            )
+        return False
+    except requests.RequestException as e:
+        log(f"⚠️ 发送 Telegram 消息失败(chat_id={chat_id_str}): {e}")
         return False
 
 
@@ -471,11 +505,15 @@ def send_daily_report(config, stats, server_identifier):
     dry_run = os.environ.get("BLOG_ACCESS_DRY_RUN") == "1"
     skip_clear = os.environ.get("BLOG_ACCESS_SKIP_CLEAR") == "1"
 
+    all_sent = True
+
     for site in config["sites"]:
         site_url = site["url"].rstrip("/")
         site_key = site_url.replace("https://", "").replace("http://", "")
 
         token, chat_id = resolve_telegram_target(site, config)
+
+        esc_site = html.escape(site_url)
 
         if site_key in stats:
             data = normalize_site_stats(stats[site_key])
@@ -486,40 +524,35 @@ def send_daily_report(config, stats, server_identifier):
             direct_visits = data.get("direct_visits", 0)
             proxy_healthcheck_failures = data.get("proxy_healthcheck_failures", 0)
             proxy_launch_failovers = data.get("proxy_launch_failovers", 0)
-            last_run_articles = data.get("last_run_articles", 0)
-            last_run_proxy_articles = data.get("last_run_proxy_articles", 0)
-            last_run_direct_articles = data.get("last_run_direct_articles", 0)
             success_rate = round(success / total * 100, 2) if total > 0 else 0
 
-            message = (
-                f"📅 *博客访问统计报告-{server_identifier}*\n"
-                f"*站点:* {site_url}\n"
-                f"*日期:* {date_str}\n\n"
-                f"*统计数据:*\n"
-                f"- 累计总访问文章数: {total}\n"
-                f"- 累计成功访问文章数: {success}\n"
-                f"- 累计失败访问文章数: {fail}\n"
-                f"- 累计走代理访问次数: {proxy_visits}\n"
-                f"- 累计直连访问次数: {direct_visits}\n"
-                f"- 代理健康检查失败次数: {proxy_healthcheck_failures}\n"
-                f"- 代理启动回退直连次数: {proxy_launch_failovers}\n"
-                f"- 最近一次运行文章数: {last_run_articles}\n"
-                f"- 最近一次运行代理文章数: {last_run_proxy_articles}\n"
-                f"- 最近一次运行直连文章数: {last_run_direct_articles}\n"
-                f"- 累计成功率: {success_rate}%\n"
-            )
+            message_lines = [
+                "📊 博客访问统计日报",
+                "【基础信息】",
+                f"🌐 站点: {esc_site}",
+                f"📅 日期: {date_str}",
+                "【累计统计】",
+                f"📈 总访问: {total}",
+                f"✅ 成功: {success} | ❌ 失败: {fail}",
+                f"🌍 代理: {proxy_visits} | 直连: {direct_visits}",
+                f"🛡️ 健康失败: {proxy_healthcheck_failures} | 回退直连: {proxy_launch_failovers}",
+            ]
+            message = "\n".join(message_lines)
         else:
-            message = (
-                f"📅 *博客访问统计报告*\n"
-                f"*站点:* {site_url}\n"
-                f"*日期:* {date_str}\n\n"
-                f"无访问数据。\n"
-            )
+            message = "\n".join([
+                "📊 博客访问统计日报",
+                "【基础信息】",
+                f"🌐 站点: {esc_site}",
+                f"📅 日期: {date_str}",
+                "【累计统计】",
+                "📭 暂无访问数据",
+            ])
 
         sent = send_telegram_message(token, chat_id, message)
         if sent:
             log(f"✅ 报告发送完成: {site_url}")
         else:
+            all_sent = False
             log(f"⚠️ 报告发送失败: {site_url}")
 
         append_run_history({
@@ -537,9 +570,12 @@ def send_daily_report(config, stats, server_identifier):
     elif skip_clear:
         log("🧪 SKIP CLEAR：已发送报告，但保留统计数据文件。")
     else:
-        if os.path.exists(STATS_FILE):
-            os.remove(STATS_FILE)
-        log("✅ 发送完毕，已清空统计数据文件。")
+        if all_sent:
+            if os.path.exists(STATS_FILE):
+                os.remove(STATS_FILE)
+            log("✅ 发送完毕，已清空统计数据文件。")
+        else:
+            log("⚠️ 存在发送失败，保留统计数据文件以便重试。")
 
 
 async def main():

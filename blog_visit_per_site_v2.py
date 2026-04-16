@@ -498,78 +498,86 @@ async def visit_site(site_config, pages, headless, stats, server_identifier, glo
     })
 
 
+def build_site_report_block(site_url, stats):
+    site_key = site_url.replace("https://", "").replace("http://", "")
+    data = normalize_site_stats(stats.get(site_key, {}))
+    total = data.get("total_visits", 0)
+    success = data.get("successful_visits", 0)
+    fail = data.get("failed_visits", 0)
+    proxy_visits = data.get("proxy_visits", 0)
+    direct_visits = data.get("direct_visits", 0)
+    proxy_healthcheck_failures = data.get("proxy_healthcheck_failures", 0)
+    proxy_launch_failovers = data.get("proxy_launch_failovers", 0)
+
+    lines = [
+        f"🌐 站点: {site_url}",
+        f"📈 总访问: {total}",
+        f"✅ 成功: {success} | ❌ 失败: {fail}",
+        f"🌍 代理: {proxy_visits} | 直连: {direct_visits}",
+    ]
+
+    if proxy_healthcheck_failures or proxy_launch_failovers:
+        lines.append(
+            f"🛡 健康失败: {proxy_healthcheck_failures} | 回退直连: {proxy_launch_failovers}"
+        )
+
+    return "\n".join(lines)
+
+
 def send_daily_report(config, stats, server_identifier):
     yesterday = datetime.date.today() - datetime.timedelta(days=1)
     date_str = yesterday.strftime("%Y-%m-%d")
     dry_run = os.environ.get("BLOG_ACCESS_DRY_RUN") == "1"
     skip_clear = os.environ.get("BLOG_ACCESS_SKIP_CLEAR") == "1"
+    all_sent = True
 
+    grouped_targets = {}
     for site in config["sites"]:
         site_url = site["url"].rstrip("/")
-        site_key = site_url.replace("https://", "").replace("http://", "")
-
         token, chat_id = resolve_telegram_target(site, config)
+        target_key = (token, str(chat_id).strip() if chat_id is not None else "")
+        grouped_targets.setdefault(target_key, []).append(site_url)
 
-        if site_key in stats:
-            data = normalize_site_stats(stats[site_key])
-            total = data.get("total_visits", 0)
-            success = data.get("successful_visits", 0)
-            fail = data.get("failed_visits", 0)
-            proxy_visits = data.get("proxy_visits", 0)
-            direct_visits = data.get("direct_visits", 0)
-            proxy_healthcheck_failures = data.get("proxy_healthcheck_failures", 0)
-            proxy_launch_failovers = data.get("proxy_launch_failovers", 0)
-            message = (
-                f"📊 博客访问统计日报\n"
-                f"【基础信息】\n"
-                f"🖥 主机: {server_identifier}\n"
-                f"🌐 站点: {site_url}\n"
-                f"📅 日期: {date_str}\n"
-                f"【累计统计】\n"
-                f"📈 总访问: {total}\n"
-                f"✅ 成功: {success} | ❌ 失败: {fail}\n"
-                f"🌍 代理: {proxy_visits} | 直连: {direct_visits}\n"
-                f"🛡 健康失败: {proxy_healthcheck_failures} | 回退直连: {proxy_launch_failovers}"
-            )
-        else:
-            message = (
-                f"📊 博客访问统计日报\n"
-                f"【基础信息】\n"
-                f"🖥 主机: {server_identifier}\n"
-                f"🌐 站点: {site_url}\n"
-                f"📅 日期: {date_str}\n"
-                f"【累计统计】\n"
-                f"📈 总访问: 0\n"
-                f"✅ 成功: 0 | ❌ 失败: 0\n"
-                f"🌍 代理: 0 | 直连: 0\n"
-                f"🛡 健康失败: 0 | 回退直连: 0"
-            )
+    for (token, chat_id), site_urls in grouped_targets.items():
+        header = (
+            f"📊 博客访问统计日报\n"
+            f"【基础信息】\n"
+            f"🖥 主机: {server_identifier}\n"
+            f"📅 日期: {date_str}"
+        )
+        site_blocks = [build_site_report_block(site_url, stats) for site_url in site_urls]
+        message = header + "\n\n" + "\n\n".join(site_blocks)
 
         sent = send_telegram_message(token, chat_id, message)
         if sent:
-            log(f"✅ 报告发送完成: {site_url}")
+            log(f"✅ 报告发送完成: {len(site_urls)} 个站点 -> chat_id={chat_id}")
         else:
-            log(f"⚠️ 报告发送失败: {site_url}")
+            all_sent = False
+            log(f"⚠️ 报告发送失败: {len(site_urls)} 个站点 -> chat_id={chat_id}")
 
-        append_run_history({
-            "ts": datetime.datetime.now().isoformat(),
-            "run_type": "report",
-            "server_identifier": server_identifier,
-            "site": site_url,
-            "sent": sent,
-            "dry_run": dry_run,
-            "skip_clear": skip_clear,
-        })
+        for site_url in site_urls:
+            append_run_history({
+                "ts": datetime.datetime.now().isoformat(),
+                "run_type": "report",
+                "server_identifier": server_identifier,
+                "site": site_url,
+                "sent": sent,
+                "dry_run": dry_run,
+                "skip_clear": skip_clear,
+                "delivery_mode": "grouped_message",
+                "grouped_site_count": len(site_urls),
+            })
 
     if dry_run:
         log("🧪 DRY RUN：跳过清空统计数据文件。")
     elif skip_clear:
         log("🧪 SKIP CLEAR：已发送报告，但保留统计数据文件。")
+    elif not all_sent:
+        log("⚠️ 存在发送失败，保留统计数据文件，避免丢失待重发数据。")
     else:
         if os.path.exists(STATS_FILE):
             os.remove(STATS_FILE)
         log("✅ 发送完毕，已清空统计数据文件。")
-
 
 async def main():
     if len(sys.argv) < 2:

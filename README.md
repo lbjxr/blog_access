@@ -118,6 +118,11 @@ cd /opt/blog_access
 ./run.sh report server-name
 ```
 
+说明：
+- 同一个 Telegram 目标下的多个站点会合并为 **一条日报消息** 发送
+- 报告默认按 `secrets.json` / 环境变量 / 站点内配置解析 Telegram 目标
+- 如果任一目标发送失败，统计文件不会被清空，避免待重发数据丢失
+
 #### proxy-check
 检测代理出口 IP。
 

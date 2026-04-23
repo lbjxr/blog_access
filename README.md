@@ -138,6 +138,8 @@ cd /opt/blog_access
 ### `config.json`
 主配置文件，保存站点、代理、分页等信息。通过 GitHub/一键安装时，如果仓库中没有真实 `config.json`，安装器会自动根据 `config.example.json` 生成一份。
 
+脚本会先根据页面 DOM 自动匹配内置站点/主题策略，再叠加站点级 `selectors` 覆盖；因此对同类 Hexo 主题通常不需要为每个域名单独硬编码。
+
 示例：
 
 ```json
@@ -192,13 +194,22 @@ Telegram 配置解析优先级：
   "url": "https://example.com",
   "selectors": {
     "cards": ["div.recent-post-item", "div.post-block"],
-    "title_links": ["a.article-title"],
-    "fallback_links": ["div.post-button a.btn", "h2.post-title a"]
+    "title_links": ["a.article-title", "h2.post-title a"],
+    "fallback_links": ["div.post-button a.btn", "h2.post-title a"],
+    "article_body": ["div.post-body", "article .post-content", "main"],
+    "article_nav_links": ["div.post-nav a", ".related-posts a"]
   }
 }
 ```
 
-未配置时使用默认选择器。
+说明：
+- `cards`：首页/列表页文章卡片
+- `title_links`：优先使用的文章标题链接
+- `fallback_links`：标题未命中时的兜底文章入口
+- `article_body`：文章正文区域，用于确认确实进入详情页
+- `article_nav_links`：文章页内继续浏览的站内文章链接（上一篇/下一篇/相关推荐）
+
+未配置时使用默认选择器，并会尝试自动识别内置 Hexo 主题策略。
 
 ---
 

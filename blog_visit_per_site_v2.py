@@ -19,10 +19,26 @@ SECRETS_FILE = "secrets.json"
 STATS_FILE = "visit_stats.json"
 RUN_HISTORY_FILE = "run_history.jsonl"
 DEFAULT_SELECTORS = {
-    "cards": ["div.recent-post-item", "div.post-block"],
-    "title_links": ["a.article-title"],
-    "fallback_links": ["div.post-button a.btn", "h2.post-title a"],
+    "cards": ["div.recent-post-item", ".post-block", "div.post-block"],
+    "title_links": ["a.article-title", "h2.post-title a", "a.post-title-link"],
+    "fallback_links": ["div.post-button a.btn", "h2.post-title a", "a[rel='bookmark']"],
+    "article_body": ["div.post-body", "article .post-content", "article", "main"],
+    "article_nav_links": ["div.post-nav a", "nav.post-nav a", ".post-recommend a", ".related-posts a"],
 }
+
+SITE_RULES = [
+    {
+        "name": "hexo-next-like",
+        "match_tokens": ["post-block", "post-title", "post-body"],
+        "selectors": {
+            "cards": [".post-block", "div.post-block"],
+            "title_links": ["h2.post-title a", "a.post-title-link"],
+            "fallback_links": ["div.post-button a.btn", "a[rel='bookmark']"],
+            "article_body": ["div.post-body", "main"],
+            "article_nav_links": ["div.post-nav a"],
+        },
+    }
+]
 
 DEVICE_PROFILES = [
     {
@@ -175,13 +191,28 @@ def append_run_history(entry):
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
-def get_site_selectors(site_config):
-    selectors = dict(DEFAULT_SELECTORS)
-    custom = site_config.get("selectors", {}) or {}
-    for key, value in custom.items():
+def merge_selector_map(base, override):
+    merged = {k: list(v) if isinstance(v, list) else v for k, v in base.items()}
+    for key, value in (override or {}).items():
         if isinstance(value, list) and value:
-            selectors[key] = value
-    return selectors
+            merged[key] = value
+    return merged
+
+
+def detect_site_rule(site_url, html_text):
+    html_text = html_text or ""
+    for rule in SITE_RULES:
+        match_tokens = rule.get("match_tokens", [])
+        if match_tokens and all(token in html_text for token in match_tokens):
+            log(f"🧩 命中站点策略: {rule['name']} ({site_url})")
+            return rule
+    return None
+
+
+def get_site_selectors(site_config, detected_rule=None):
+    selectors = merge_selector_map(DEFAULT_SELECTORS, detected_rule.get("selectors", {}) if detected_rule else {})
+    custom = site_config.get("selectors", {}) or {}
+    return merge_selector_map(selectors, custom)
 
 
 def send_telegram_message(token, chat_id, message):
@@ -270,6 +301,98 @@ async def find_article_from_card(card, selectors):
     return fallback_href, fallback_title
 
 
+async def page_has_any_selector(page, selector_list):
+    for selector in selector_list:
+        try:
+            if await page.query_selector(selector):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+async def collect_article_nav_links(page, selectors, site_url, current_url):
+    discovered = []
+    seen = set()
+    parsed_site = urlparse(site_url)
+    current_clean = current_url.split("#")[0].rstrip("/")
+
+    for selector in selectors.get("article_nav_links", []):
+        try:
+            elements = await page.query_selector_all(selector)
+        except Exception:
+            continue
+
+        for elem in elements[:8]:
+            href = await elem.get_attribute("href")
+            title = await elem.get_attribute("title") or await elem.inner_text() or "站内文章"
+            if not href:
+                continue
+            full_url = urljoin(site_url + "/", href).split("#")[0]
+            parsed = urlparse(full_url)
+            if parsed.netloc != parsed_site.netloc:
+                continue
+            if full_url.rstrip("/") == current_clean:
+                continue
+            if full_url in seen:
+                continue
+            seen.add(full_url)
+            discovered.append((full_url, title.strip()))
+    return discovered
+
+
+async def browse_article(page, title, full_url, selectors, site_url, context, max_depth=1):
+    visited_urls = set()
+    success_count = 0
+    failure_count = 0
+
+    async def _open_and_browse(target_title, target_url, depth):
+        nonlocal success_count, failure_count
+        cleaned_url = target_url.split("#")[0].rstrip("/")
+        if cleaned_url in visited_urls:
+            return
+        visited_urls.add(cleaned_url)
+
+        article_page = await context.new_page()
+        article_success = False
+        try:
+            log(f"📰 新标签页打开文章: {target_title} ({target_url})")
+            await article_page.goto(target_url, timeout=60000)
+            await article_page.wait_for_load_state('load')
+
+            if selectors.get("article_body"):
+                has_body = await page_has_any_selector(article_page, selectors["article_body"])
+                if not has_body:
+                    raise RuntimeError("未找到正文区域，疑似未进入文章详情页")
+
+            scroll_y_article = random.randint(100, 442)
+            await article_page.evaluate(f"window.scrollBy(0, {scroll_y_article})")
+            log(f"🔽 文章页滚动 {scroll_y_article} 像素")
+
+            stay_time = random.randint(15, 43)
+            log(f"⏳ 文章页停留 {stay_time} 秒")
+            await asyncio.sleep(stay_time)
+            article_success = True
+            success_count += 1
+
+            if depth < max_depth:
+                nav_links = await collect_article_nav_links(article_page, selectors, site_url, target_url)
+                if nav_links:
+                    next_url, next_title = random.choice(nav_links)
+                    log(f"➡️ 文章内继续浏览: {next_title} ({next_url})")
+                    await asyncio.sleep(random.randint(2, 5))
+                    await _open_and_browse(next_title, next_url, depth + 1)
+        except Exception as e:
+            failure_count += 1
+            log(f"⚠️ 文章页访问异常: {target_url}, 错误: {e}")
+        finally:
+            await article_page.close()
+            log("↩️ 关闭文章页")
+
+    await _open_and_browse(title, full_url, 0)
+    return success_count, failure_count, len(visited_urls)
+
+
 async def visit_site(site_config, pages, headless, stats, server_identifier, global_config):
     site_url = site_config["url"].rstrip("/")
     site_key = site_url.replace("https://", "").replace("http://", "")
@@ -277,7 +400,7 @@ async def visit_site(site_config, pages, headless, stats, server_identifier, glo
         stats[site_key] = {}
     normalize_site_stats(stats[site_key])
 
-    selectors = get_site_selectors(site_config)
+    detected_rule_name = "default"
     run_total = 0
     run_success = 0
     run_fail = 0
@@ -377,6 +500,11 @@ async def visit_site(site_config, pages, headless, stats, server_identifier, glo
             await home_page.goto(site_url, timeout=60000)
             await home_page.wait_for_load_state('load')
 
+            detected_rule = detect_site_rule(site_url, await home_page.content())
+            if detected_rule:
+                detected_rule_name = detected_rule["name"]
+            selectors = get_site_selectors(site_config, detected_rule)
+
             try:
                 for page_num in range(pages):
                     if page_num > 0:
@@ -407,44 +535,29 @@ async def visit_site(site_config, pages, headless, stats, server_identifier, glo
                                 continue
 
                             full_url = urljoin(site_url + "/", href)
-                            log(f"📰 新标签页打开文章: {title} ({full_url})")
+                            article_successes, article_failures, visited_count = await browse_article(
+                                home_page,
+                                title,
+                                full_url,
+                                selectors,
+                                site_url,
+                                context,
+                                max_depth=1,
+                            )
 
-                            run_total += 1
-                            stats[site_key]["total_visits"] += 1
+                            run_total += visited_count
+                            stats[site_key]["total_visits"] += visited_count
                             if use_proxy:
-                                stats[site_key]["proxy_visits"] += 1
-                                run_proxy_articles += 1
+                                stats[site_key]["proxy_visits"] += visited_count
+                                run_proxy_articles += visited_count
                             else:
-                                stats[site_key]["direct_visits"] += 1
-                                run_direct_articles += 1
+                                stats[site_key]["direct_visits"] += visited_count
+                                run_direct_articles += visited_count
 
-                            article_page = await context.new_page()
-                            article_success = False
-                            try:
-                                await article_page.goto(full_url, timeout=60000)
-                                await article_page.wait_for_load_state('load')
-
-                                scroll_y_article = random.randint(100, 442)
-                                await article_page.evaluate(f"window.scrollBy(0, {scroll_y_article})")
-                                log(f"🔽 文章页滚动 {scroll_y_article} 像素")
-
-                                stay_time = random.randint(15, 43)
-                                log(f"⏳ 文章页停留 {stay_time} 秒")
-                                await asyncio.sleep(stay_time)
-
-                                article_success = True
-                            except Exception as e:
-                                log(f"⚠️ 文章页访问异常: {full_url}, 错误: {e}")
-                            finally:
-                                await article_page.close()
-                                log("↩️ 关闭文章页，回到首页")
-
-                            if article_success:
-                                run_success += 1
-                                stats[site_key]["successful_visits"] += 1
-                            else:
-                                run_fail += 1
-                                stats[site_key]["failed_visits"] += 1
+                            run_success += article_successes
+                            run_fail += article_failures
+                            stats[site_key]["successful_visits"] += article_successes
+                            stats[site_key]["failed_visits"] += article_failures
 
                             save_stats(stats)
                             await asyncio.sleep(random.randint(3, 7))
@@ -495,6 +608,7 @@ async def visit_site(site_config, pages, headless, stats, server_identifier, glo
         "proxy_check_detail": proxy_check_detail,
         "proxy_articles": run_proxy_articles,
         "direct_articles": run_direct_articles,
+        "site_rule": detected_rule_name,
     })
 
 

@@ -2,6 +2,7 @@
 set -euo pipefail
 
 cd /opt/blog_access
+export PLAYWRIGHT_BROWSERS_PATH=0
 source venv/bin/activate
 
 cmd="${1:-}"

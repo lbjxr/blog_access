@@ -131,6 +131,11 @@ cd /opt/blog_access
 ./run.sh proxy-check 3
 ```
 
+说明：
+- `run.sh` 默认会设置 `PLAYWRIGHT_BROWSERS_PATH=0`
+- 这样 Playwright 会优先使用项目虚拟环境内已安装的浏览器，而不是依赖宿主机默认缓存目录
+- 对新机器初始化、跨机迁移和 cron 运行更稳，避免出现“浏览器已安装但运行时找不到”的错位问题
+
 ---
 
 ## Configuration
